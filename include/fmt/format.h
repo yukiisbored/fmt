@@ -2255,12 +2255,16 @@ FMT_CONSTEXPR bool check_format_string(
 }
 
 template <typename... Args, typename String>
-typename std::enable_if<is_compile_string<String>::value>::type
+typename std::enable_if<is_compile_string<String>::value, bool>::type
     check_format_string(String format_str) {
+  FMT_CONSTEXPR_DECL auto data = format_str.data();
+  if (format_str.size() == 2 && data[0] == '{' && data[1] == '}')
+    return true;
   FMT_CONSTEXPR_DECL bool invalid_format =
       internal::check_format_string<char, internal::error_handler, Args...>(
-        string_view(format_str.data(), format_str.size()));
+        string_view(data, format_str.size()));
   (void)invalid_format;
+  return false;
 }
 
 // Specifies whether to format T using the standard formatter.
@@ -3087,6 +3091,12 @@ class format_int {
   std::string str() const { return std::string(str_, size()); }
 };
 
+template <typename Char, typename T>
+typename std::enable_if<std::is_same<Char, char>::value, std::string>::type
+inline internal::to_string(int value) {
+  return format_int(value).str();
+}
+
 // Formats a decimal integer value writing into buffer and returns
 // a pointer to the end of the formatted string. This function doesn't
 // write a terminating null character.
@@ -3668,7 +3678,7 @@ FMT_END_NAMESPACE
     typedef typename std::decay<decltype(s)>::type pointer; \
     struct S : fmt::compile_string { \
       static FMT_CONSTEXPR pointer data() { return s; } \
-      static FMT_CONSTEXPR size_t size() { return sizeof(s); } \
+      static FMT_CONSTEXPR size_t size() { return sizeof(s) - 1; } \
       explicit operator fmt::string_view() const { return s; } \
     }; \
     return S{}; \

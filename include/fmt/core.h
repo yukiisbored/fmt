@@ -1333,16 +1333,23 @@ struct is_compile_string :
     std::integral_constant<bool, std::is_base_of<compile_string, S>::value> {};
 
 template <typename... Args, typename S>
-inline typename std::enable_if<!is_compile_string<S>::value>::type
-    check_format_string(const S &) {}
+inline typename std::enable_if<!is_compile_string<S>::value, bool>::type
+    check_format_string(const S &) { return false; }
 template <typename... Args, typename S>
-typename std::enable_if<is_compile_string<S>::value>::type
+typename std::enable_if<is_compile_string<S>::value, bool>::type
     check_format_string(S);
 
 template <typename Char>
 std::basic_string<Char> vformat(
     basic_string_view<Char> format_str,
     basic_format_args<typename buffer_context<Char>::type> args);
+
+template <typename Char, typename... T>
+const Char *to_string(const T &...) { return {}; }
+
+template <typename Char, typename T>
+typename std::enable_if<std::is_same<Char, char>::value, std::string>::type
+to_string(int);
 }  // namespace internal
 
 format_context::iterator vformat_to(
@@ -1422,11 +1429,15 @@ template <typename String, typename... Args>
 inline std::basic_string<
   typename internal::format_string_traits<String>::char_type>
     format(const String &format_str, const Args & ... args) {
-  internal::check_format_string<Args...>(format_str);
+  typedef typename internal::format_string_traits<String>::char_type char_t;
+  if (internal::check_format_string<Args...>(format_str)) {
+    auto result = internal::to_string<char_t>(args...);
+    if (std::is_same<decltype(result), std::basic_string<char_t>>::value)
+      return result;
+  }
   // This should be just
   //   return vformat(format_str, make_format_args(args...));
   // but gcc has trouble optimizing the latter, so break it down.
-  typedef typename internal::format_string_traits<String>::char_type char_t;
   typedef typename buffer_context<char_t>::type context_t;
   format_arg_store<context_t, Args...> as{args...};
   return internal::vformat(
